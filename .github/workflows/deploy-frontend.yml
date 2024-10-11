@@ -1,0 +1,40 @@
+name: Deploy Frontend to EC2
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'  # Adjust as needed for your frontend
+
+    - name: Build Frontend
+      run: |
+        npm install
+        npm run build
+
+    - name: Deploy to EC2 via SSH
+      run: |
+        scp -o StrictHostKeyChecking=no -i ${{ secrets.EC2_KEY }} -r build/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/ecom-frontend/
+
+        ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_KEY }} ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          cd /home/ubuntu
+
+          # Restart frontend with PM2
+          pm2 stop ecom-frontend || true
+          pm2 delete ecom-frontend || true
+          pm2 start "serve -s /home/ubuntu/ecom-frontend/build -l 3000" --name ecom-frontend
+
+          pm2 save
+          exit
+        EOF
